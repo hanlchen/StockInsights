@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-neutral-950 text-neutral-100;
+}
+
+.table-cell-num {
+  @apply font-mono tabular-nums text-right;
+}

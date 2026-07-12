@@ -1,0 +1,34 @@
+# Render "Blueprint" -- lets Render provision this service straight from the
+# repo with no manual dashboard clicking beyond "connect repo, apply
+# blueprint" (Render detects this file automatically for a repo root or,
+# since this one lives in backend/, when you point Render at this
+# subdirectory as the repo root during setup).
+#
+# Free tier notes (see README "Hosting for free" section):
+# - Free web services spin down after ~15 min idle; the first request after
+#   a gap takes ~30-50s to wake back up. Fine for a personal app with 2-3
+#   daily users, not for anything latency-sensitive.
+# - The daily refresh job does NOT run here -- it runs on GitHub Actions
+#   (.github/workflows/daily-refresh.yml), directly against Supabase,
+#   independent of whether this service is awake. Render's own Cron Jobs
+#   are a paid-plan feature, which is why GitHub Actions is used instead.
+services:
+  - type: web
+    name: stock-insights-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: CACHE_TTL_SECONDS
+        value: "900"
+      # Set these in the Render dashboard (Secret/plain env vars), not here --
+      # they're deployment-specific and shouldn't be committed:
+      # - DATABASE_URL       (Supabase pooler connection string, see .env.example)
+      # - CORS_ORIGINS       (your Vercel frontend URL, e.g. https://your-app.vercel.app)
