@@ -28,6 +28,13 @@ services:
         value: /api/v1
       - key: CACHE_TTL_SECONDS
         value: "900"
+      # Pins Render to Python 3.10 (matches the .python-version file and the
+      # locally-tested venv) -- without this, Render defaults to whatever its
+      # latest Python is, which has broken pandas==2.2.2's build from source
+      # before (no prebuilt wheel for a Python that new -> pip tries to
+      # compile it -> fails on a Cython/GCC incompatibility).
+      - key: PYTHON_VERSION
+        value: 3.10.14
       # Set these in the Render dashboard (Secret/plain env vars), not here --
       # they're deployment-specific and shouldn't be committed:
       # - DATABASE_URL       (Supabase pooler connection string, see .env.example)
