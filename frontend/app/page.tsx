@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { ApiRequestError, getMarketOverview, getSectorPerformance } from "@/lib/api";
 import { useQueryState } from "@/lib/useQueryState";
+import DailyRecommendationCard from "@/components/DailyRecommendationCard";
 import MoversTable from "@/components/MoversTable";
 import SectorPerformanceTable from "@/components/SectorPerformanceTable";
 import SearchBar from "@/components/SearchBar";
@@ -86,6 +87,8 @@ function DashboardContent() {
         <h1 className="text-xl font-semibold mb-3">NYSE + NASDAQ Market Overview</h1>
         <SearchBar />
       </div>
+
+      <DailyRecommendationCard />
 
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-neutral-800 p-3 text-sm">
         <div className="flex items-center gap-2">

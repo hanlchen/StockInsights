@@ -20,3 +20,7 @@ python-dotenv==1.0.1
 # Needed for pandas.read_html in services/sp500.py -- parses the Wikipedia
 # S&P 500 constituents table (no free official index-membership API exists).
 lxml==5.3.0
+# "AI Pick of the Day" (services/recommendation_service.py) -- only used by
+# scripts/generate_recommendation.py, the daily batch job. Unused/harmless if
+# ANTHROPIC_API_KEY isn't set (that script just logs and exits early).
+anthropic==0.39.0

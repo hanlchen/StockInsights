@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.computation.market_cap import market_cap_bucket
-from app.db.models import ComputedMetrics, Stock
+from app.db.models import ComputedMetrics, DailyRecommendation, Stock
 
 
 def upsert_stock(
@@ -148,3 +148,63 @@ def get_all_market_rows(db: Session, market_cap_filter: str | None = None) -> li
         }
         for stock, metrics in rows
     ]
+
+
+def upsert_daily_recommendation(
+    db: Session,
+    *,
+    date: str,
+    ticker: str,
+    reasoning: str,
+    risk_note: str | None,
+    candidate_count: int | None,
+    model_used: str | None,
+) -> DailyRecommendation:
+    """`date` is a "YYYY-MM-DD" string (UTC) -- one row per day, overwritten
+    if the job is re-run the same day (e.g. a manual workflow_dispatch retry
+    after a failed run), same upsert pattern as computed_metrics."""
+    obj = db.get(DailyRecommendation, date)
+    if obj is None:
+        obj = DailyRecommendation(date=date)
+        db.add(obj)
+    obj.ticker = ticker
+    obj.reasoning = reasoning
+    obj.risk_note = risk_note
+    obj.candidate_count = candidate_count
+    obj.model_used = model_used
+    return obj
+
+
+def get_latest_recommendation(db: Session) -> dict | None:
+    """Joins the most recent daily_recommendations row with its stock's
+    profile + latest computed metrics, for the API's pure-DB-read endpoint.
+    Returns None if the generation job has never run yet (fresh install, or
+    the daily job hasn't reached this step)."""
+    query = (
+        select(DailyRecommendation, Stock, ComputedMetrics)
+        .join(Stock, DailyRecommendation.ticker == Stock.ticker)
+        .outerjoin(ComputedMetrics, DailyRecommendation.ticker == ComputedMetrics.ticker)
+        .order_by(DailyRecommendation.date.desc())
+        .limit(1)
+    )
+    row = db.execute(query).first()
+    if row is None:
+        return None
+    rec, stock, metrics = row
+    return {
+        "date": rec.date,
+        "ticker": rec.ticker,
+        "company_name": stock.company_name,
+        "sector": stock.sector,
+        "industry": stock.industry,
+        "reasoning": rec.reasoning,
+        "risk_note": rec.risk_note,
+        "candidate_count": rec.candidate_count,
+        "model_used": rec.model_used,
+        "generated_at": rec.generated_at,
+        "current_price": metrics.current_price if metrics else None,
+        "pct_change_1d": metrics.pct_change_1d if metrics else None,
+        "pct_change_1mo": metrics.pct_change_1mo if metrics else None,
+        "pct_change_1y": metrics.pct_change_1y if metrics else None,
+        "market_cap": metrics.market_cap if metrics else None,
+    }

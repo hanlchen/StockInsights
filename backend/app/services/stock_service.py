@@ -287,6 +287,20 @@ def _persist_best_effort(ticker: str, quote: dict, result: dict) -> None:
                 employees=quote.get("employees"),
                 ipo_date=quote.get("ipo_date"),
             )
+            # Force the stocks row to be sent to Postgres now, before the
+            # computed_metrics insert below. Without this, SessionLocal's
+            # autoflush=False means both inserts sit pending in the same
+            # session and only hit the DB together at db.commit() -- on
+            # Postgres that surfaced as
+            # "insert or update on table computed_metrics violates foreign
+            # key constraint computed_metrics_ticker_fkey ... Key (ticker)=
+            # (X) is not present in table stocks" for every single ticker in
+            # production (never seen locally because SQLite doesn't enforce
+            # FK constraints by default, so the same ordering issue was
+            # silently masked in dev). Flushing here guarantees the parent
+            # row exists before the child insert is attempted, regardless of
+            # how the ORM would otherwise order a combined flush.
+            db.flush()
             # momentum_trend is a nested dict on the API response but the DB
             # stores it as 4 flat columns (see db/models.py) -- flatten here,
             # the one place that knows both shapes, rather than leaking the

@@ -149,6 +149,30 @@ class User(Base):
     watchlists = relationship("Watchlist", back_populates="user")
 
 
+class DailyRecommendation(Base):
+    """One row per calendar day: the AI-picked 'stock of the day', generated
+    by scripts/generate_recommendation.py as part of the daily refresh job
+    (see recommendation_service.py). Keyed by date (not overwritten like
+    ComputedMetrics) so past picks accumulate as a track record instead of
+    only ever showing today's -- a future page could list history from this
+    table with no schema change needed.
+
+    This is explicitly NOT investment advice -- see the disclaimer baked
+    into recommendation_service.py's prompt and surfaced again in the API
+    response/frontend card. It's an LLM's read of already-computed momentum
+    metrics, not a licensed recommendation."""
+
+    __tablename__ = "daily_recommendations"
+
+    date = Column(String, primary_key=True)  # "YYYY-MM-DD", UTC, one row/day
+    ticker = Column(String, ForeignKey("stocks.ticker"), nullable=False)
+    reasoning = Column(Text, nullable=False)
+    risk_note = Column(Text, nullable=True)
+    candidate_count = Column(Integer, nullable=True)
+    model_used = Column(String, nullable=True)
+    generated_at = Column(DateTime, server_default=func.now())
+
+
 class Watchlist(Base):
     __tablename__ = "watchlists"
 

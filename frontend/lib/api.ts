@@ -1,5 +1,6 @@
 import type {
   ChartPeriod,
+  DailyRecommendation,
   IndustryListResponse,
   MarketCapBucket,
   MarketOverview,
@@ -156,6 +157,10 @@ export function getMonthlyMomentumScreener(
     sort_by: params.sortBy ?? "avg",
   });
   return request<MonthlyMomentumScreenerResponse>(`/market/monthly-momentum-screener${qs}`);
+}
+
+export function getDailyRecommendation(): Promise<DailyRecommendation> {
+  return request<DailyRecommendation>("/market/recommendation/today");
 }
 
 export function getTickerList(params: TickerListParams = {}): Promise<TickerListResponse> {

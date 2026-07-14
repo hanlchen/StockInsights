@@ -253,3 +253,26 @@ export interface MonthlyMomentumScreenerResponse {
   universe_note: string;
   results: MonthlyMomentumEntry[];
 }
+
+// "AI Pick of the Day" -- generated once daily by the backend batch job
+// (scripts/generate_recommendation.py), served here as a pure DB read (see
+// backend/app/services/recommendation_service.py for how the pick itself
+// gets made). Not financial advice -- see `disclaimer`.
+export interface DailyRecommendation {
+  date: string; // "YYYY-MM-DD", UTC
+  ticker: string;
+  company_name: string | null;
+  sector: string | null;
+  industry: string | null;
+  reasoning: string;
+  risk_note: string | null;
+  candidate_count: number | null;
+  model_used: string | null;
+  generated_at: string | null;
+  current_price: number | null;
+  pct_change_1d: number | null;
+  pct_change_1mo: number | null;
+  pct_change_1y: number | null;
+  market_cap: number | null;
+  disclaimer: string;
+}

@@ -2,7 +2,9 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.computation.market_cap import VALID_BUCKETS
 from app.computation.returns import PERIOD_TRADING_DAYS
+from app.db.session import SessionLocal
 from app.schemas.market import (
+    DailyRecommendationResponse,
     IndustryListResponse,
     MarketOverview,
     MomentumScreenerResponse,
@@ -10,7 +12,7 @@ from app.schemas.market import (
     SectorPerformance,
     TickerListResponse,
 )
-from app.services import market_service
+from app.services import market_service, persistence
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -143,3 +145,23 @@ def tickers(
 @router.get("/industries", response_model=IndustryListResponse)
 def industries() -> IndustryListResponse:
     return IndustryListResponse(industries=market_service.get_industry_list())
+
+
+@router.get("/recommendation/today", response_model=DailyRecommendationResponse)
+def recommendation_today() -> DailyRecommendationResponse:
+    """Pure DB read of the latest AI-generated pick -- no live LLM call ever
+    happens on this request path. See scripts/generate_recommendation.py
+    (the daily batch job that actually writes this) and
+    services/recommendation_service.py for how the pick is produced."""
+    with SessionLocal() as db:
+        data = persistence.get_latest_recommendation(db)
+    if data is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No AI pick of the day has been generated yet -- run "
+                "`python -m scripts.generate_recommendation` (requires "
+                "ANTHROPIC_API_KEY) after the daily refresh job."
+            ),
+        )
+    return DailyRecommendationResponse(**data)

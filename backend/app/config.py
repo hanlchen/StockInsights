@@ -22,6 +22,14 @@ class Settings(BaseSettings):
 
     alpha_vantage_api_key: str | None = None
 
+    # "AI Pick of the Day" (see services/recommendation_service.py). Only
+    # needed by the daily batch job (scripts/generate_recommendation.py) --
+    # the API endpoint itself is a pure DB read of whatever that job last
+    # wrote, so this key never needs to live on Render, only wherever the
+    # daily refresh runs (GitHub Actions secret, per DEPLOYMENT.md).
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

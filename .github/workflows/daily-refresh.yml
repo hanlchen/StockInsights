@@ -58,3 +58,16 @@ jobs:
           # sectors/momentum/tickers would then only cover those, not the
           # full exchange). See scripts/refresh_cache.py's docstring.
           python -m scripts.refresh_cache
+
+      - name: Generate AI pick of the day
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Set this in GitHub: repo -> Settings -> Secrets and variables ->
+          # Actions -> New repository secret -> name it ANTHROPIC_API_KEY,
+          # value from console.anthropic.com. This step is best-effort: if
+          # the secret isn't set, or the API call fails, the script logs a
+          # warning and exits 0 -- it will never fail this workflow or block
+          # the core movers/momentum refresh above, since the AI pick is a
+          # supplementary feature, not core data.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m scripts.generate_recommendation

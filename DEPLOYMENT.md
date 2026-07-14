@@ -94,6 +94,13 @@ and click "Restore" if so.
    - `CORS_ORIGINS` -- leave as `http://localhost:4000` for now; you'll come
      back and update this in step 4 once you have your Vercel URL
    - `APP_ENV` = `production`
+   - `PYTHON_VERSION` = `3.10.14` -- **important:** without this, Render
+     defaults to whatever its newest Python is, which has no prebuilt wheel
+     for `pandas==2.2.2` and fails trying to compile it from source (a
+     Cython/GCC incompatibility, surfaces as a `meson`/`ninja` build error).
+     A `.python-version` file committed in `backend/` should also pin this
+     automatically, but setting it explicitly here too is the belt-and-suspenders
+     fix if you already hit that build failure.
 5. Deploy. Once it's live, note the URL Render gives you (something like
    `https://stock-insights-backend.onrender.com`) -- you'll need it for
    step 3. Sanity check it: `https://<your-render-url>/health` should
@@ -145,7 +152,14 @@ repo (from this session's changes) -- it just needs one secret to run:
 1. GitHub repo -> **Settings -> Secrets and variables -> Actions -> New
    repository secret**.
 2. Name: `DATABASE_URL`. Value: the same Supabase pooler string from step 1.
-3. That's it -- the schedule (`0 11 * * *` UTC, ~7am US Eastern) is already
+3. Optional -- **AI Pick of the Day**: add a second secret named
+   `ANTHROPIC_API_KEY` (get one at console.anthropic.com) if you want the
+   daily AI-generated stock pick feature (see README). This step of the
+   workflow is best-effort: skip this secret and it just logs a warning and
+   exits cleanly, without blocking or failing the core movers/momentum
+   refresh above. Not needed on Render -- the API endpoint only reads
+   whatever this job last wrote, it never calls Anthropic itself.
+4. That's it -- the schedule (`0 11 * * *` UTC, ~7am US Eastern) is already
    committed. Adjust the cron line in the workflow file if you want a
    different time; see the comment next to it for the UTC math.
 4. **Test it now, don't wait for tomorrow morning:** GitHub repo ->
