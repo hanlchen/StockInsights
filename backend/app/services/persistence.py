@@ -83,6 +83,45 @@ def upsert_computed_metrics(db: Session, ticker: str, metrics: dict) -> Computed
     return obj
 
 
+def get_stock_snapshot(db: Session, ticker: str) -> dict | None:
+    """Single-ticker DB snapshot (Stock + ComputedMetrics), used as a
+    fallback source for company profile + valuation fundamentals when a
+    live per-request yfinance call gets its price but yfinance's `.info`
+    (the source of ALL of these fields) fails or gets rate-limited -- see
+    stock_service.py's `_fill_fundamentals_from_db`. This is exactly what
+    the daily batch job (scripts/refresh_cache.py) already wrote for this
+    ticker, typically from a different network than the live request (e.g.
+    GitHub Actions vs. Render), so it's often available even when the live
+    fetch just got throttled. Returns None if this ticker has never been
+    through the batch job or an on-demand lookup before (fresh install, or
+    a ticker nobody has looked up or refreshed yet)."""
+    stock = db.get(Stock, ticker)
+    if stock is None:
+        return None
+    metrics = db.get(ComputedMetrics, ticker)
+    return {
+        "company_name": stock.company_name,
+        "sector": stock.sector,
+        "industry": stock.industry,
+        "business_summary": stock.business_summary,
+        "website": stock.website,
+        "employees": stock.employees,
+        "ipo_date": stock.ipo_date,
+        "market_cap": metrics.market_cap if metrics else None,
+        "revenue_ttm": metrics.revenue_ttm if metrics else None,
+        "book_value": metrics.book_value if metrics else None,
+        "price_to_book": metrics.price_to_book if metrics else None,
+        "trailing_pe": metrics.trailing_pe if metrics else None,
+        "forward_pe": metrics.forward_pe if metrics else None,
+        "trailing_eps": metrics.trailing_eps if metrics else None,
+        "forward_eps": metrics.forward_eps if metrics else None,
+        "dividend_yield": metrics.dividend_yield if metrics else None,
+        "beta": metrics.beta if metrics else None,
+        "fifty_two_week_high": metrics.fifty_two_week_high if metrics else None,
+        "fifty_two_week_low": metrics.fifty_two_week_low if metrics else None,
+    }
+
+
 def get_distinct_industries(db: Session) -> list[str]:
     """Sorted distinct industry names, for the All Tickers page's industry
     filter dropdown. Scoped to stocks that have a computed_metrics row (i.e.

@@ -201,6 +201,61 @@ def get_quarterly_financials(ticker: str, use_cache: bool = True) -> dict:
     return result
 
 
+# Fields that only ever come from yfinance's `.info` call (never fast_info),
+# so they're exactly what goes blank when `.info` fails or gets rate-limited
+# but price still comes through -- see _fill_fundamentals_from_db() below
+# and yfinance_provider.py's logging of that failure. "company_name" is
+# handled separately below since its live-fetch failure mode is a fallback
+# value (the ticker itself), not None.
+FUNDAMENTAL_FALLBACK_FIELDS = (
+    "sector", "industry", "business_summary", "website", "employees", "ipo_date",
+    "market_cap", "revenue_ttm", "book_value", "price_to_book", "trailing_pe",
+    "forward_pe", "trailing_eps", "forward_eps", "dividend_yield", "beta",
+    "fifty_two_week_high", "fifty_two_week_low",
+)
+
+
+def _fill_fundamentals_from_db(ticker: str, quote: dict) -> dict:
+    """Backfills fundamentals/profile fields from the last DB snapshot
+    (batch job or a prior on-demand lookup) whenever the live yfinance call
+    just got them from a *different* source (Render) than the one that
+    likely populated the DB (GitHub Actions), so a live `.info` rate-limit
+    doesn't have to mean showing nothing at all -- yesterday's numbers beat
+    a wall of "—". Never overwrites a field the live call actually got;
+    only fills genuine gaps. Best-effort: a DB hiccup here just means no
+    fallback, never a failed request."""
+    missing = [f for f in FUNDAMENTAL_FALLBACK_FIELDS if quote.get(f) is None]
+    company_name_is_fallback = quote.get("company_name") == quote.get("ticker")
+    if not missing and not company_name_is_fallback:
+        return quote
+
+    try:
+        with SessionLocal() as db:
+            snapshot = persistence.get_stock_snapshot(db, ticker)
+    except Exception as exc:
+        logger.warning("%s: DB fallback lookup for fundamentals failed: %s", ticker, exc)
+        return quote
+    if not snapshot:
+        return quote
+
+    filled = dict(quote)
+    used_fallback = []
+    for field in missing:
+        if snapshot.get(field) is not None:
+            filled[field] = snapshot[field]
+            used_fallback.append(field)
+    if company_name_is_fallback and snapshot.get("company_name"):
+        filled["company_name"] = snapshot["company_name"]
+        used_fallback.append("company_name")
+
+    if used_fallback:
+        logger.info(
+            "%s: live fetch was missing %d field(s), filled from DB snapshot: %s",
+            ticker, len(used_fallback), ", ".join(used_fallback),
+        )
+    return filled
+
+
 def get_stock_metrics(ticker: str, use_cache: bool = True) -> dict:
     ticker = ticker.upper().strip()
     cache_key = f"stock:{ticker}"
@@ -212,6 +267,7 @@ def get_stock_metrics(ticker: str, use_cache: bool = True) -> dict:
 
     try:
         quote = _call_with_rate_limit_retry(lambda: provider.get_quote(ticker), ticker, "quote")
+        quote = _fill_fundamentals_from_db(ticker, quote)
         history = _call_with_rate_limit_retry(
             lambda: provider.get_price_history(ticker, period="5y"), ticker, "price history"
         )
