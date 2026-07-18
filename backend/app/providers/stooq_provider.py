@@ -83,7 +83,10 @@ class StooqProvider(StockDataProvider):
 
         return df[["Open", "High", "Low", "Close", "Volume"]]
 
-    def get_quote(self, ticker: str) -> dict:
+    def get_quote(self, ticker: str, fetch_fundamentals: bool = True) -> dict:
+        # `fetch_fundamentals` is accepted for interface compatibility with
+        # YFinanceProvider but has no effect here -- Stooq never has these
+        # fields regardless (see fundamentals_unavailable below).
         history = self.get_price_history(ticker, period="5d")
         last = history.iloc[-1]
         return {

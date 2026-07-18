@@ -96,17 +96,22 @@ class YFinanceProvider(StockDataProvider):
             for col in columns
         ]
 
-    def get_quote(self, ticker: str) -> dict:
+    def get_quote(self, ticker: str, fetch_fundamentals: bool = True) -> dict:
         """
         Two Yahoo endpoints back this, with very different reliability:
         - `fast_info` (price/volume/exchange) -- lightweight, rarely needs the
           "crumb" auth token Yahoo has increasingly required, so it's the
-          resilient path.
-        - `.info` (company name/sector/industry) -- heavier, and the one that
-          most commonly breaks/rate-limits/needs a crumb. Treated as
-          best-effort enrichment: if it fails we still return a usable quote
-          with just company_name/sector/industry left blank, instead of
-          failing the whole request over metadata we don't strictly need.
+          resilient path. Always fetched.
+        - `.info` (company name/sector/industry/valuation fundamentals) --
+          heavier, and the one that most commonly breaks/rate-limits/needs a
+          crumb. Treated as best-effort enrichment: if it fails we still
+          return a usable quote with just those fields left blank, instead
+          of failing the whole request over data we don't strictly need
+          live. Skipped entirely when `fetch_fundamentals=False` (see
+          stock_service.py -- this is the slow-changing data the daily batch
+          job already refreshes, so re-fetching it live on every page view
+          isn't just unnecessary, it's extra load on an endpoint that's
+          already prone to rate-limiting).
         """
         t = yf.Ticker(ticker)
 
@@ -136,57 +141,58 @@ class YFinanceProvider(StockDataProvider):
         fifty_two_week_high = fifty_two_week_low = None
         info_error: Exception | None = None
         info_empty = False
-        try:
-            info = t.info
-            if info:
-                company_name = info.get("longName") or info.get("shortName") or company_name
-                sector = info.get("sector")
-                industry = info.get("industry")
-                price = price if price is not None else (info.get("currentPrice") or info.get("regularMarketPrice"))
-                volume = volume if volume is not None else (info.get("volume") or info.get("regularMarketVolume"))
-                exchange = exchange or _normalize_exchange(info.get("exchange"))
-                market_cap = market_cap or info.get("marketCap")
-                # yfinance's `totalRevenue` is trailing-twelve-months revenue
-                # (Yahoo's "Revenue (ttm)" figure), which is what the user
-                # asked for -- not most-recent-quarter revenue.
-                revenue_ttm = info.get("totalRevenue")
+        if fetch_fundamentals:
+            try:
+                info = t.info
+                if info:
+                    company_name = info.get("longName") or info.get("shortName") or company_name
+                    sector = info.get("sector")
+                    industry = info.get("industry")
+                    price = price if price is not None else (info.get("currentPrice") or info.get("regularMarketPrice"))
+                    volume = volume if volume is not None else (info.get("volume") or info.get("regularMarketVolume"))
+                    exchange = exchange or _normalize_exchange(info.get("exchange"))
+                    market_cap = market_cap or info.get("marketCap")
+                    # yfinance's `totalRevenue` is trailing-twelve-months revenue
+                    # (Yahoo's "Revenue (ttm)" figure), which is what the user
+                    # asked for -- not most-recent-quarter revenue.
+                    revenue_ttm = info.get("totalRevenue")
 
-                business_summary = info.get("longBusinessSummary")
-                website = info.get("website")
-                employees = info.get("fullTimeEmployees")
-                # Yahoo/yfinance has no true "founding year" field -- the
-                # closest available proxy is the stock's first trade date
-                # (IPO/listing date on this exchange), not when the company
-                # itself was founded. Exposed as `ipo_date`, not
-                # `founded_year`, so the distinction is visible downstream.
-                ipo_epoch = info.get("firstTradeDateEpochUtc") or info.get("firstTradeDateMilliseconds")
-                if ipo_epoch:
-                    # Some yfinance versions report seconds, others ms --
-                    # anything larger than a plausible seconds value
-                    # (year ~5138) is almost certainly milliseconds.
-                    if ipo_epoch > 10_000_000_000:
-                        ipo_epoch = ipo_epoch / 1000
-                    try:
-                        ipo_date = datetime.fromtimestamp(ipo_epoch, tz=timezone.utc)
-                    except (OverflowError, OSError, ValueError):
-                        ipo_date = None
+                    business_summary = info.get("longBusinessSummary")
+                    website = info.get("website")
+                    employees = info.get("fullTimeEmployees")
+                    # Yahoo/yfinance has no true "founding year" field -- the
+                    # closest available proxy is the stock's first trade date
+                    # (IPO/listing date on this exchange), not when the company
+                    # itself was founded. Exposed as `ipo_date`, not
+                    # `founded_year`, so the distinction is visible downstream.
+                    ipo_epoch = info.get("firstTradeDateEpochUtc") or info.get("firstTradeDateMilliseconds")
+                    if ipo_epoch:
+                        # Some yfinance versions report seconds, others ms --
+                        # anything larger than a plausible seconds value
+                        # (year ~5138) is almost certainly milliseconds.
+                        if ipo_epoch > 10_000_000_000:
+                            ipo_epoch = ipo_epoch / 1000
+                        try:
+                            ipo_date = datetime.fromtimestamp(ipo_epoch, tz=timezone.utc)
+                        except (OverflowError, OSError, ValueError):
+                            ipo_date = None
 
-                book_value = info.get("bookValue")
-                price_to_book = info.get("priceToBook")
-                trailing_pe = info.get("trailingPE")
-                forward_pe = info.get("forwardPE")
-                trailing_eps = info.get("trailingEps")
-                forward_eps = info.get("forwardEps")
-                dividend_yield = info.get("dividendYield")
-                beta = info.get("beta")
-                fifty_two_week_high = info.get("fiftyTwoWeekHigh")
-                fifty_two_week_low = info.get("fiftyTwoWeekLow")
-            else:
-                info_empty = True
-        except Exception as exc:
-            info_error = exc
+                    book_value = info.get("bookValue")
+                    price_to_book = info.get("priceToBook")
+                    trailing_pe = info.get("trailingPE")
+                    forward_pe = info.get("forwardPE")
+                    trailing_eps = info.get("trailingEps")
+                    forward_eps = info.get("forwardEps")
+                    dividend_yield = info.get("dividendYield")
+                    beta = info.get("beta")
+                    fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+                    fifty_two_week_low = info.get("fiftyTwoWeekLow")
+                else:
+                    info_empty = True
+            except Exception as exc:
+                info_error = exc
 
-        if info_error is not None or info_empty:
+        if fetch_fundamentals and (info_error is not None or info_empty):
             # Previously silent whenever `price` still came through via
             # fast_info -- that left zero visibility into why book_value/
             # trailing_pe/EPS/dividend_yield/beta/etc. are empty in
@@ -242,13 +248,15 @@ class YFinanceProvider(StockDataProvider):
             "beta": beta,
             # True whenever `.info` (the ONLY source of every field above
             # except current_price/volume/exchange/market_cap, which prefer
-            # fast_info) failed or came back empty this call -- lets callers
-            # distinguish "we asked and there's genuinely no value" (e.g. no
-            # dividend) from "we couldn't ask at all right now" (rate-limited/
-            # blocked), so the frontend can show a real message instead of a
-            # blank "—" for the latter. See stock_service.py's
-            # get_stock_metrics()/_fill_fundamentals_from_db().
-            "fundamentals_unavailable": info_error is not None or info_empty,
+            # fast_info) was skipped (fetch_fundamentals=False), failed, or
+            # came back empty this call -- lets callers distinguish "we
+            # asked and there's genuinely no value" (e.g. no dividend) from
+            # "we don't have a live value right now" (skipped in favor of
+            # the DB, or rate-limited/blocked), so the frontend can show a
+            # real message instead of a blank "—" for the latter, and so
+            # stock_service.py knows it should fill gaps from the DB
+            # snapshot regardless of which of these three reasons applies.
+            "fundamentals_unavailable": not fetch_fundamentals or info_error is not None or info_empty,
             "fifty_two_week_high": fifty_two_week_high,
             "fifty_two_week_low": fifty_two_week_low,
         }

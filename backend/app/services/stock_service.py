@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.cache.memory_cache import cache
 from app.computation.market_cap import market_cap_bucket
@@ -202,11 +202,11 @@ def get_quarterly_financials(ticker: str, use_cache: bool = True) -> dict:
 
 
 # Fields that only ever come from yfinance's `.info` call (never fast_info),
-# so they're exactly what goes blank when `.info` fails or gets rate-limited
-# but price still comes through -- see _fill_fundamentals_from_db() below
-# and yfinance_provider.py's logging of that failure. "company_name" is
-# handled separately below since its live-fetch failure mode is a fallback
-# value (the ticker itself), not None.
+# so they're exactly what goes blank when `.info` fails, gets rate-limited,
+# or is deliberately skipped -- see _merge_fundamentals_from_snapshot() below
+# and yfinance_provider.py's logging of live-fetch failures. "company_name"
+# is handled separately below since its live-fetch failure mode is a
+# fallback value (the ticker itself), not None.
 FUNDAMENTAL_FALLBACK_FIELDS = (
     "sector", "industry", "business_summary", "website", "employees", "ipo_date",
     "market_cap", "revenue_ttm", "book_value", "price_to_book", "trailing_pe",
@@ -214,28 +214,51 @@ FUNDAMENTAL_FALLBACK_FIELDS = (
     "fifty_two_week_high", "fifty_two_week_low",
 )
 
+# These fields are slow-changing -- a company's sector, business summary,
+# P/E, EPS, dividend yield, beta, etc. don't meaningfully move within a
+# single day the way price does. The daily batch job (scripts/
+# refresh_cache.py) already refreshes them once a day, so as long as that
+# refresh is recent enough, there's no good reason to ALSO hit yfinance's
+# `.info` live on every single page view -- it adds latency, and it adds
+# load to the exact endpoint that's prone to Yahoo's rate limiting, for data
+# that's already sitting in the DB. 30h (not 24h) gives slack for the daily
+# job's actual run time to drift without a same-day lookup needlessly
+# falling back to a live fetch.
+FUNDAMENTALS_DB_FRESHNESS_HOURS = 30
 
-def _fill_fundamentals_from_db(ticker: str, quote: dict) -> dict:
-    """Backfills fundamentals/profile fields from the last DB snapshot
-    (batch job or a prior on-demand lookup) whenever the live yfinance call
-    just got them from a *different* source (Render) than the one that
-    likely populated the DB (GitHub Actions), so a live `.info` rate-limit
-    doesn't have to mean showing nothing at all -- yesterday's numbers beat
-    a wall of "—". Never overwrites a field the live call actually got;
-    only fills genuine gaps. Best-effort: a DB hiccup here just means no
-    fallback, never a failed request."""
+
+def _lookup_db_snapshot(ticker: str) -> dict | None:
+    """Best-effort DB read -- a hiccup here should never break the live
+    stock response, it just means no snapshot to prefer/fall back to."""
+    try:
+        with SessionLocal() as db:
+            return persistence.get_stock_snapshot(db, ticker)
+    except Exception as exc:
+        logger.warning("%s: DB snapshot lookup failed: %s", ticker, exc)
+        return None
+
+
+def _snapshot_is_fresh(snapshot: dict | None) -> bool:
+    computed_at = snapshot.get("computed_at") if snapshot else None
+    if computed_at is None:
+        return False
+    return (datetime.utcnow() - computed_at) < timedelta(hours=FUNDAMENTALS_DB_FRESHNESS_HOURS)
+
+
+def _merge_fundamentals_from_snapshot(ticker: str, quote: dict, snapshot: dict | None) -> dict:
+    """Backfills fundamentals/profile fields from the DB snapshot (already
+    looked up once in get_stock_metrics(), passed in here rather than
+    re-queried) whenever the live call didn't have them -- whether because
+    `.info` was deliberately skipped (snapshot was fresh enough) or because
+    it was attempted and failed/got rate-limited. Never overwrites a field
+    the live call actually got; only fills genuine gaps. `snapshot` may be
+    None (ticker never refreshed/looked up before) -- then this is a no-op."""
+    if not snapshot:
+        return quote
+
     missing = [f for f in FUNDAMENTAL_FALLBACK_FIELDS if quote.get(f) is None]
     company_name_is_fallback = quote.get("company_name") == quote.get("ticker")
     if not missing and not company_name_is_fallback:
-        return quote
-
-    try:
-        with SessionLocal() as db:
-            snapshot = persistence.get_stock_snapshot(db, ticker)
-    except Exception as exc:
-        logger.warning("%s: DB fallback lookup for fundamentals failed: %s", ticker, exc)
-        return quote
-    if not snapshot:
         return quote
 
     filled = dict(quote)
@@ -256,7 +279,17 @@ def _fill_fundamentals_from_db(ticker: str, quote: dict) -> dict:
     return filled
 
 
-def get_stock_metrics(ticker: str, use_cache: bool = True) -> dict:
+def get_stock_metrics(ticker: str, use_cache: bool = True, prefer_db_fundamentals: bool = True) -> dict:
+    """`prefer_db_fundamentals` (default True) is what lets a live page view
+    skip yfinance's `.info` when the DB already has a fresh-enough snapshot
+    -- see FUNDAMENTALS_DB_FRESHNESS_HOURS. scripts/refresh_cache.py (the
+    daily batch job whose entire JOB is refreshing that DB snapshot) passes
+    False here deliberately: if it didn't, the day AFTER its first
+    successful fetch, every subsequent run would see its own recent
+    computed_at and skip re-fetching `.info` forever, permanently freezing
+    fundamentals at whatever they were on day one. The live single-ticker
+    path has no such conflict -- it only ever reads, never IS the refresh
+    job -- so it defaults to preferring the DB."""
     ticker = ticker.upper().strip()
     cache_key = f"stock:{ticker}"
 
@@ -265,9 +298,17 @@ def get_stock_metrics(ticker: str, use_cache: bool = True) -> dict:
         if cached:
             return {**cached, "cache_hit": True}
 
+    snapshot = _lookup_db_snapshot(ticker)
+    # Skip the live `.info` fetch entirely when the DB already has a fresh
+    # enough snapshot -- price/volume still come live either way (fast_info,
+    # unaffected by this flag). See FUNDAMENTALS_DB_FRESHNESS_HOURS above.
+    fetch_fundamentals = not (prefer_db_fundamentals and _snapshot_is_fresh(snapshot))
+
     try:
-        quote = _call_with_rate_limit_retry(lambda: provider.get_quote(ticker), ticker, "quote")
-        quote = _fill_fundamentals_from_db(ticker, quote)
+        quote = _call_with_rate_limit_retry(
+            lambda: provider.get_quote(ticker, fetch_fundamentals=fetch_fundamentals), ticker, "quote"
+        )
+        quote = _merge_fundamentals_from_snapshot(ticker, quote, snapshot)
         history = _call_with_rate_limit_retry(
             lambda: provider.get_price_history(ticker, period="5y"), ticker, "price history"
         )

@@ -27,7 +27,7 @@ class StockDataProvider(ABC):
         ...
 
     @abstractmethod
-    def get_quote(self, ticker: str) -> dict:
+    def get_quote(self, ticker: str, fetch_fundamentals: bool = True) -> dict:
         """Returns current price, volume, company name, sector, industry,
         market_cap, and revenue_ttm (trailing-twelve-months revenue), plus
         best-effort profile/fundamentals fields (business_summary, website,
@@ -36,7 +36,17 @@ class StockDataProvider(ABC):
         fifty_two_week_high, fifty_two_week_low). Any of these may be None
         if a provider can't source fundamentals (e.g. Stooq, the emergency
         fallback, only returns the required core fields). Raises
-        ProviderError on failure."""
+        ProviderError on failure.
+
+        `fetch_fundamentals=False` skips fetching the fields above entirely
+        (only current_price/volume/exchange/market_cap are fetched) --
+        stock_service.py uses this when a recent-enough DB snapshot already
+        has those fields, since they're slow-changing (refreshed daily by
+        the batch job already) and re-fetching them live on every single
+        page view both adds latency and needlessly adds to yfinance's
+        overall request volume (a real factor in its rate limiting).
+        Providers that never have fundamentals at all (e.g. Stooq) should
+        accept and ignore this parameter."""
         ...
 
     def search(self, query: str) -> list[dict]:

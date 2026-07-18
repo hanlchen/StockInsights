@@ -84,15 +84,18 @@ def upsert_computed_metrics(db: Session, ticker: str, metrics: dict) -> Computed
 
 
 def get_stock_snapshot(db: Session, ticker: str) -> dict | None:
-    """Single-ticker DB snapshot (Stock + ComputedMetrics), used as a
-    fallback source for company profile + valuation fundamentals when a
-    live per-request yfinance call gets its price but yfinance's `.info`
-    (the source of ALL of these fields) fails or gets rate-limited -- see
-    stock_service.py's `_fill_fundamentals_from_db`. This is exactly what
-    the daily batch job (scripts/refresh_cache.py) already wrote for this
-    ticker, typically from a different network than the live request (e.g.
-    GitHub Actions vs. Render), so it's often available even when the live
-    fetch just got throttled. Returns None if this ticker has never been
+    """Single-ticker DB snapshot (Stock + ComputedMetrics) -- the source of
+    truth for company profile + valuation fundamentals on the live stock
+    page. These fields are slow-changing (only reported quarterly/updated
+    occasionally) and already refreshed daily by the batch job
+    (scripts/refresh_cache.py), so stock_service.get_stock_metrics() prefers
+    this DB snapshot over re-fetching yfinance's `.info` live on every page
+    view -- both to avoid needless load on an endpoint prone to
+    rate-limiting, and because a live `.info` call is often LESS reliable
+    than what the batch job (running from a different network, e.g. GitHub
+    Actions vs. Render) already has. `computed_at` is included so the
+    caller can decide whether this snapshot is fresh enough to prefer over
+    attempting a live fetch. Returns None if this ticker has never been
     through the batch job or an on-demand lookup before (fresh install, or
     a ticker nobody has looked up or refreshed yet)."""
     stock = db.get(Stock, ticker)
@@ -119,6 +122,7 @@ def get_stock_snapshot(db: Session, ticker: str) -> dict | None:
         "beta": metrics.beta if metrics else None,
         "fifty_two_week_high": metrics.fifty_two_week_high if metrics else None,
         "fifty_two_week_low": metrics.fifty_two_week_low if metrics else None,
+        "computed_at": metrics.computed_at if metrics else None,
     }
 
 

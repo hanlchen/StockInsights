@@ -34,11 +34,11 @@ class ProviderChain(StockDataProvider):
             f"All providers failed to fetch price history for {ticker} -- " + " | ".join(errors)
         )
 
-    def get_quote(self, ticker: str) -> dict:
+    def get_quote(self, ticker: str, fetch_fundamentals: bool = True) -> dict:
         errors: list[str] = []
         for provider in self._providers:
             try:
-                return provider.get_quote(ticker)
+                return provider.get_quote(ticker, fetch_fundamentals=fetch_fundamentals)
             except ProviderError as exc:
                 logger.warning("Provider %s failed for %s: %s", provider.name, ticker, exc)
                 errors.append(f"{provider.name}: {exc}")

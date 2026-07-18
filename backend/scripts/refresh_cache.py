@@ -135,7 +135,13 @@ def _retry_backoff_seconds(round_num: int) -> int:
 def _refresh_one(ticker: str) -> tuple[str, Exception | None]:
     time.sleep(random.uniform(*REQUEST_DELAY_RANGE_SECONDS))
     try:
-        stock_service.get_stock_metrics(ticker, use_cache=False)
+        # prefer_db_fundamentals=False: this job's entire purpose is to
+        # refresh computed_metrics/stocks with a fresh live fetch -- the
+        # live single-ticker API path defaults to True so page views can
+        # skip a redundant .info call when this job already ran recently,
+        # but THIS is that job, so it must not skip based on its own prior
+        # run (see stock_service.get_stock_metrics()'s docstring).
+        stock_service.get_stock_metrics(ticker, use_cache=False, prefer_db_fundamentals=False)
         return ticker, None
     except Exception as exc:
         return ticker, exc
