@@ -26,7 +26,15 @@ export default function PriceHeader({ metrics }: { metrics: StockMetrics }) {
             )}
           </div>
           <div className="text-neutral-400">{metrics.company_name}</div>
-          {metrics.sector && <div className="text-xs text-neutral-500 mt-1">{metrics.sector}</div>}
+          {metrics.sector ? (
+            <div className="text-xs text-neutral-500 mt-1">{metrics.sector}</div>
+          ) : (
+            metrics.fundamentals_unavailable && (
+              <div className="text-xs italic text-amber-600 mt-1">
+                Sector/industry: API unable to fetch this right now
+              </div>
+            )
+          )}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
             <span>Market cap {formatCompactDollars(metrics.market_cap)}</span>
             <span>Revenue (TTM) {formatCompactDollars(metrics.revenue_ttm)}</span>
@@ -54,8 +62,14 @@ export default function PriceHeader({ metrics }: { metrics: StockMetrics }) {
           )}
         </div>
       </div>
-      {metrics.business_summary && (
+      {metrics.business_summary ? (
         <p className="mt-4 text-sm leading-relaxed text-neutral-400">{metrics.business_summary}</p>
+      ) : (
+        metrics.fundamentals_unavailable && (
+          <p className="mt-4 text-sm italic text-amber-600">
+            Company description: API unable to fetch this right now
+          </p>
+        )
       )}
     </div>
   );

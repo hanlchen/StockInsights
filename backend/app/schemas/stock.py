@@ -45,6 +45,19 @@ class StockMetrics(BaseModel):
     fifty_two_week_high: float | None = None
     fifty_two_week_low: float | None = None
 
+    fundamentals_unavailable: bool = Field(
+        default=False,
+        description=(
+            "True when the live fetch of business_summary/sector/industry/website/"
+            "employees/ipo_date/book_value/price_to_book/trailing_pe/forward_pe/"
+            "trailing_eps/forward_eps/dividend_yield/beta failed or was rate-limited "
+            "this call (or the fallback Stooq provider was used, which has none of "
+            "these at all) -- lets the frontend distinguish 'we asked and there's "
+            "genuinely no value' from 'we couldn't ask right now', even after any "
+            "of these fields got backfilled from the last successful DB snapshot."
+        ),
+    )
+
     pct_change_1d: float | None = None
     pct_change_1w: float | None = None
     pct_change_1mo: float | None = None

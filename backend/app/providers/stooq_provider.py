@@ -99,6 +99,13 @@ class StooqProvider(StockDataProvider):
             # yfinance is reachable again.
             "market_cap": None,
             "revenue_ttm": None,
+            # Always true for Stooq -- it never has book_value/PE/EPS/
+            # dividend_yield/beta/sector/industry/profile fields at all, not
+            # just "unavailable this call." Lets the frontend show an actual
+            # "unavailable" message instead of a bare "—", the same as it
+            # does for a rate-limited yfinance .info call (see
+            # yfinance_provider.py's matching field).
+            "fundamentals_unavailable": True,
         }
 
 

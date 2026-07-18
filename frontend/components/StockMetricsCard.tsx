@@ -12,16 +12,26 @@ function Metric({
   value,
   colorClass,
   tooltip,
+  unavailable,
 }: {
   label: string;
   value: string;
   colorClass?: string;
   tooltip?: string;
+  // True when this specific value is null AND the backend flagged the live
+  // fetch as having failed/rate-limited (see StockMetrics.fundamentals_unavailable)
+  // -- shows an explicit message instead of silently rendering "—", so a
+  // fetch failure doesn't look identical to "this stock genuinely has none."
+  unavailable?: boolean;
 }) {
   return (
     <div className="rounded-lg border border-neutral-800 p-4" title={tooltip}>
       <div className="text-xs text-neutral-500">{label}</div>
-      <div className={`mt-1 font-mono text-lg font-semibold ${colorClass || ""}`}>{value}</div>
+      {unavailable ? (
+        <div className="mt-1 text-xs italic text-amber-600">API unable to fetch this right now</div>
+      ) : (
+        <div className={`mt-1 font-mono text-lg font-semibold ${colorClass || ""}`}>{value}</div>
+      )}
     </div>
   );
 }
@@ -107,14 +117,46 @@ export default function StockMetricsCard({ metrics }: { metrics: StockMetrics })
       <MomentumTrendRow trend={metrics.momentum_trend} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Metric label="Book Value/Share" value={formatCurrency(metrics.book_value)} />
-        <Metric label="Price/Book" value={formatDecimal(metrics.price_to_book)} />
-        <Metric label="P/E (trailing)" value={formatDecimal(metrics.trailing_pe)} />
-        <Metric label="P/E (forward)" value={formatDecimal(metrics.forward_pe)} />
-        <Metric label="EPS (trailing)" value={formatCurrency(metrics.trailing_eps)} />
-        <Metric label="EPS (forward)" value={formatCurrency(metrics.forward_eps)} />
-        <Metric label="Dividend Yield" value={formatPercent(metrics.dividend_yield)} />
-        <Metric label="Beta" value={formatDecimal(metrics.beta)} />
+        <Metric
+          label="Book Value/Share"
+          value={formatCurrency(metrics.book_value)}
+          unavailable={metrics.fundamentals_unavailable && metrics.book_value === null}
+        />
+        <Metric
+          label="Price/Book"
+          value={formatDecimal(metrics.price_to_book)}
+          unavailable={metrics.fundamentals_unavailable && metrics.price_to_book === null}
+        />
+        <Metric
+          label="P/E (trailing)"
+          value={formatDecimal(metrics.trailing_pe)}
+          unavailable={metrics.fundamentals_unavailable && metrics.trailing_pe === null}
+        />
+        <Metric
+          label="P/E (forward)"
+          value={formatDecimal(metrics.forward_pe)}
+          unavailable={metrics.fundamentals_unavailable && metrics.forward_pe === null}
+        />
+        <Metric
+          label="EPS (trailing)"
+          value={formatCurrency(metrics.trailing_eps)}
+          unavailable={metrics.fundamentals_unavailable && metrics.trailing_eps === null}
+        />
+        <Metric
+          label="EPS (forward)"
+          value={formatCurrency(metrics.forward_eps)}
+          unavailable={metrics.fundamentals_unavailable && metrics.forward_eps === null}
+        />
+        <Metric
+          label="Dividend Yield"
+          value={formatPercent(metrics.dividend_yield)}
+          unavailable={metrics.fundamentals_unavailable && metrics.dividend_yield === null}
+        />
+        <Metric
+          label="Beta"
+          value={formatDecimal(metrics.beta)}
+          unavailable={metrics.fundamentals_unavailable && metrics.beta === null}
+        />
       </div>
 
       <p className="mt-3 text-xs text-neutral-500">{metrics.mae_proxy_note}</p>

@@ -29,6 +29,14 @@ export interface StockMetrics {
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
 
+  // True when the live fetch of business_summary/sector/industry/website/
+  // employees/ipo_date/book_value/price_to_book/trailing_pe/forward_pe/
+  // trailing_eps/forward_eps/dividend_yield/beta failed or was rate-limited
+  // this call (or Stooq was used, which never has these) -- distinguishes
+  // "genuinely no value" from "couldn't fetch right now" so the UI can show
+  // an explicit message instead of a bare "—" for the latter.
+  fundamentals_unavailable: boolean;
+
   pct_change_1d: number | null;
   pct_change_1w: number | null;
   pct_change_1y: number | null;

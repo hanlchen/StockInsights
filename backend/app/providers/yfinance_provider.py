@@ -240,6 +240,15 @@ class YFinanceProvider(StockDataProvider):
             "forward_eps": forward_eps,
             "dividend_yield": dividend_yield,
             "beta": beta,
+            # True whenever `.info` (the ONLY source of every field above
+            # except current_price/volume/exchange/market_cap, which prefer
+            # fast_info) failed or came back empty this call -- lets callers
+            # distinguish "we asked and there's genuinely no value" (e.g. no
+            # dividend) from "we couldn't ask at all right now" (rate-limited/
+            # blocked), so the frontend can show a real message instead of a
+            # blank "—" for the latter. See stock_service.py's
+            # get_stock_metrics()/_fill_fundamentals_from_db().
+            "fundamentals_unavailable": info_error is not None or info_empty,
             "fifty_two_week_high": fifty_two_week_high,
             "fifty_two_week_low": fifty_two_week_low,
         }
