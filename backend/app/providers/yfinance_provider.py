@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timezone
 
 import pandas as pd
 import yfinance as yf
 
 from app.providers.base import ProviderError, StockDataProvider
+
+logger = logging.getLogger(__name__)
 
 # yfinance's quarterly_financials index uses these exact line-item labels
 # (case/wording has shifted across yfinance versions -- e.g. some releases
@@ -132,6 +135,7 @@ class YFinanceProvider(StockDataProvider):
         dividend_yield = beta = None
         fifty_two_week_high = fifty_two_week_low = None
         info_error: Exception | None = None
+        info_empty = False
         try:
             info = t.info
             if info:
@@ -177,8 +181,36 @@ class YFinanceProvider(StockDataProvider):
                 beta = info.get("beta")
                 fifty_two_week_high = info.get("fiftyTwoWeekHigh")
                 fifty_two_week_low = info.get("fiftyTwoWeekLow")
+            else:
+                info_empty = True
         except Exception as exc:
             info_error = exc
+
+        if info_error is not None or info_empty:
+            # Previously silent whenever `price` still came through via
+            # fast_info -- that left zero visibility into why book_value/
+            # trailing_pe/EPS/dividend_yield/beta/etc. are empty in
+            # production (they ALL come from `.info` only, never fast_info).
+            # `.info` is the heavier, crumb/cookie-gated call and is known to
+            # be more likely to get rate-limited/blocked than fast_info.
+            #
+            # Two distinct failure shapes here, both worth logging: (a) an
+            # actual exception (info_error) and (b) yfinance swallowing a
+            # blocked/rate-limited response itself and just handing back an
+            # empty/falsy dict with NO exception raised (info_empty) -- the
+            # second one is the one that was still silent after the first
+            # fix, since that fix only checked for a raised exception.
+            reason = str(info_error) if info_error is not None else (
+                "t.info returned empty/falsy data with no exception raised "
+                "-- likely Yahoo silently rate-limiting or blocking this "
+                "request rather than erroring"
+            )
+            logger.warning(
+                "yfinance .info fetch failed for %s -- fundamentals "
+                "(book_value/PE/EPS/dividend_yield/beta/sector/industry/"
+                "profile fields) will be null this call: %s",
+                ticker, reason,
+            )
 
         if price is None:
             detail = f" (.info also failed: {info_error})" if info_error else ""
