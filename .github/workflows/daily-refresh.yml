@@ -10,11 +10,11 @@ name: Daily market data refresh
 # public repos; a generous monthly minutes budget on private repos).
 on:
   schedule:
-    # 11:00 UTC =~ 7:00am US Eastern (6:00am Central, 4:00am Pacific) most of
+    # 11:00 UTC =~ 9:30am US Eastern (8:30am Central) most of
     # the year -- adjust to taste. Cron is UTC-only and does NOT shift for
     # daylight saving, so the US-local time this actually runs at will drift
     # by an hour twice a year unless you nudge this manually.
-    - cron: "0 11 * * *"
+    - cron: "30 13 * * 1-5"
   # Lets you trigger a run by hand from the Actions tab (GitHub -> Actions ->
   # "Daily market data refresh" -> "Run workflow") -- useful for testing this
   # workflow itself without waiting for the schedule, or for an ad-hoc
