@@ -45,7 +45,8 @@ async def trigger_refresh(token: str = Query(...)):
             ["python", "scripts/refresh_cache.py"],
             timeout=900,
             capture_output=True,
-            text=True
+            text=True,
+            cwd="/opt/render/project/src/backend"  # Run from backend directory
         )
         
         if result.returncode != 0:
