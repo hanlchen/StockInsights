@@ -53,6 +53,9 @@ interactively.
 import logging
 import random
 import sys
+import os
+backend_dir = os.path.join(os.path.dirname(__file__), '..')
+sys.path.insert(0, backend_dir)
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
