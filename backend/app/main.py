@@ -28,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 @app.get("/api/admin/refresh-cache")
-async def trigger_refresh(token: str = Query(...), background_tasks: BackgroundTasks = BackgroundTasks()):
+async def trigger_refresh(token: str = Query(...), background_tasks: BackgroundTasks):
     """Trigger cache refresh in background"""
     expected_token = os.getenv("REFRESH_TOKEN", "")
     if not expected_token:
