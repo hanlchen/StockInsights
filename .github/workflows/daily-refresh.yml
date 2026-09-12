@@ -31,9 +31,20 @@ jobs:
       - name: Run cache refresh
         run: |
           cd backend
-          python scripts/refresh_cache.py
+          python -m scripts.refresh_cache
         env:
           PYTHONPATH: ${{ github.workspace }}/backend
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Generate daily recommendation
+        run: |
+          cd backend
+          python -m scripts.generate_recommendation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        continue-on-error: true
 
       - name: Notify on failure
         if: failure()
