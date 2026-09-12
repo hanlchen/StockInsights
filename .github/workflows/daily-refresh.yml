@@ -1,0 +1,42 @@
+name: Daily Cache Refresh
+
+on:
+  schedule:
+    # Run at 8:30 AM Central Time on weekdays (Monday-Friday)
+    # 13:30 UTC = 8:30 AM CDT (during daylight saving)
+    # 14:30 UTC = 8:30 AM CST (during standard time)
+    # Using 13:30 UTC for consistency during CDT period
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  refresh-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run cache refresh
+        run: |
+          cd backend
+          python scripts/refresh_cache.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Cache refresh failed!"
+          exit 1
