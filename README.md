@@ -17,6 +17,16 @@ Want to host this for free (Supabase + Render + Vercel + a daily GitHub Actions 
 - Node.js 18+
 - Internet access (both installs pull packages, and the backend calls Yahoo Finance / Stooq / Nasdaq Trader at runtime)
 
+## Screenshots
+
+**Dashboard — Market Overview (movers & sectors)**
+![Dashboard](https://github.com/hanlchen/StockInsights/assets/60694336/0105c160-image.png)
+
+**Momentum Screener — Quarterly & Monthly Views**
+![Momentum Quarterly](https://github.com/hanlchen/StockInsights/assets/60694336/a2b68c90-image.png)
+![Momentum Monthly](https://github.com/hanlchen/StockInsights/assets/60694336/dd628691-image.png)
+
+
 ## First-time setup
 
 ```bash
@@ -62,7 +72,6 @@ rm backend/stock_insights.db
 
 This is a personal MVP with no auth/user data yet, so there's nothing meaningful to lose by recreating it — everything in `computed_metrics` is a recomputable cache, not a source of truth.
 
-The new `daily_recommendations` table (AI Pick of the Day) is a brand-new table, not a new column on an existing one — `Base.metadata.create_all()` creates missing tables automatically (it just can't add columns to a table that already exists), so this one needs no manual step, on SQLite or Supabase, new install or existing.
 
 ## Populating the database (required for movers/sectors/momentum/tickers)
 
@@ -135,18 +144,6 @@ Frontend: both live under the **Momentum** nav link, as the "Quarterly" and "Mon
 - **`is_sp500`** on each ticker is fetched live from Wikipedia's "List of S&P 500 companies" page (there's no free official index-membership API), refreshed once a day and cached to disk as a fallback if that fetch fails. If the response's `sp500_data_available` is `false`, treat every `is_sp500` value as unknown, not as "confirmed not a member" -- see `known limitations` below.
 - Frontend: the **All Tickers** nav link (`/tickers`), with exchange/industry filters, an S&P-500-only checkbox, a ticker/company search box, and sortable columns including industry and the three % change columns.
 
-## AI Pick of the Day
-
-An optional, best-effort feature: once a day, after `scripts.refresh_cache` runs, `scripts.generate_recommendation` takes the current quarterly momentum screener's top ~15 candidates (see above) and asks Claude (Anthropic API) to pick exactly one and explain why in plain language, citing the specific numbers it was given. The pick is stored (one row per day, in `daily_recommendations`) and served by `GET /market/recommendation/today` — a pure DB read, same pattern as movers/sectors/momentum, so **no live LLM call ever happens on a page load**, only once a day in the batch job.
-
-- **Requires `ANTHROPIC_API_KEY`** (get one at console.anthropic.com), set only wherever the daily batch job runs (a GitHub Actions secret in the free-hosting setup — see `DEPLOYMENT.md`). Not needed on Render; the API endpoint itself never calls Anthropic. `ANTHROPIC_MODEL` (default `claude-sonnet-5`) is also configurable.
-- **Best-effort, non-fatal:** if the key isn't set or the API call fails, `scripts.generate_recommendation` logs a warning and exits 0 rather than failing the whole daily-refresh workflow — this feature is supplementary, not core data.
-- **"Pure LLM judgment," not a fixed formula:** the model chooses which of the ~15 pre-filtered candidates to highlight and writes its own reasoning + a risk note, rather than a deterministic score picking the winner and the model only narrating it. More flexible, less reproducible run-to-run — a documented tradeoff, not an oversight.
-- **Guardrail:** if the model's response names a ticker outside the candidate list it was given, that response is rejected rather than persisted (see `recommendation_service.py`'s `_call_claude`) — the pick can only ever be one of the tickers actually shown to it.
-- **Not financial advice.** The prompt asks the model to describe what the data shows rather than what to do with your money, and both the API response (`disclaimer` field) and the frontend card carry an explicit disclaimer independent of the model's own wording.
-- Frontend: an "AI Pick of the Day" card at the top of the dashboard (`DailyRecommendationCard.tsx`), which renders nothing (not an error) if no pick has been generated yet — a fresh install without the API key configured looks like the feature simply isn't there, not broken.
-
-## Known limitations (carried over from the architecture doc)
 
 - **`mae_proxy` is not true MAE.** No free source gives trade-based Maximum Adverse Excursion (which needs an entry point). It's the max drawdown from a trailing 1Y local peak — labeled as a proxy everywhere in the API and UI.
 - **Movers/sectors are a snapshot, not real-time.** They reflect whenever `scripts.refresh_cache` last ran, per the scheduled-batch-job design (chosen over live-per-request, which doesn't hold up at full-exchange scale).
