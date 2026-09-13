@@ -20,11 +20,11 @@ Want to host this for free (Supabase + Render + Vercel + a daily GitHub Actions 
 ## Screenshots
 
 **Dashboard — Market Overview (movers & sectors)**
-![Dashboard](https://github.com/hanlchen/StockInsights/assets/60694336/0105c160-image.png)
+![Dashboard](./docs/screenshots/dashboard.png)
 
 **Momentum Screener — Quarterly & Monthly Views**
-![Momentum Quarterly](https://github.com/hanlchen/StockInsights/assets/60694336/a2b68c90-image.png)
-![Momentum Monthly](https://github.com/hanlchen/StockInsights/assets/60694336/dd628691-image.png)
+![Momentum Quarterly](./docs/screenshots/momentum-quarterly.png)
+![Momentum Monthly](./docs/screenshots/momentum-monthly.png)
 
 
 ## First-time setup
